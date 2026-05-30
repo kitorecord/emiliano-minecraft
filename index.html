@@ -495,7 +495,7 @@ const POOL_CX   = 0;   // centro de la pileta X
 const POOL_CZ   = 4;   // centro de la pileta Z (ligeramente al norte del spawn)
 const POOL_R    = 5;   // radio interior de agua
 const POOL_WALL = 6.5; // radio del borde de piedra
-const FOREST_Z  = 22;  // bosque al sur (Z > FOREST_Z)
+const FOREST_Z  = 32;  // bosque al sur — más lejos del spawn
 
 // Colores adicionales
 BCOL['water']    = 0x1d9de8;  // azul brillante pileta
@@ -890,24 +890,23 @@ let thirdPerson=false; // overridden to true on mobile after isMobile is set
 
 function spawnPlayer(){
   // Pre-generate chunks: plaza + bosque sur + mina norte
-  for(let cx=-4;cx<=5;cx++) for(let cz=-5;cz<=5;cz++) generateChunk(cx,cz);
+  for(let cx=-4;cx<=5;cx++) for(let cz=-5;cz<=4;cz++) generateChunk(cx,cz);
   carveMine();
   decoratePool();
-  for(let cx=-4;cx<=5;cx++) for(let cz=-5;cz<=5;cz++) buildChunkMesh(cx,cz);
+  for(let cx=-4;cx<=5;cx++) for(let cz=-5;cz<=4;cz++) buildChunkMesh(cx,cz);
 
-  // Spawn al sur de la pileta, mirando hacia ella (norte)
+  // Spawn al sur de la pileta, yaw=0 → cara al norte (-Z)
+  // Con yaw=0 la cámara de 3a persona queda al SUR (lejos del bosque)
   player.x = POOL_CX + 0.5;
-  player.z = POOL_CZ + POOL_WALL + 4;
+  player.z = POOL_CZ + POOL_WALL + 3;
   player.y = SURF_Y + 2;
-  player.yaw = Math.PI; // mirando al norte (hacia la pileta)
-  player.vy = 0;
+  player.yaw   = 0;   // mira al norte → cámara queda al sur, fuera del bosque
+  player.pitch = 0;
+  player.vy    = 0;
 
-  // On mobile always start in third person
-  if(isMobile){
-    thirdPerson = true;
-    player.pitch = 0;
-    document.getElementById('view-btn').textContent = '👁 1ª Persona [T]';
-  }
+  // Siempre tercera persona al iniciar (mobile y desktop)
+  thirdPerson = true;
+  document.getElementById('view-btn').textContent = '👁 1ª Persona [T]';
 }
 
 // ═══════════════════════════════════════════════
