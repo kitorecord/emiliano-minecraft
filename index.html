@@ -486,39 +486,99 @@ const sD = (x,y,z,t)=>t===null?dimMap.delete(k(x,y,z)):dimMap.set(k(x,y,z),t);
 const gAny = (x,y,z)=>gB(x,y,z)||gD(x,y,z);
 
 // ═══════════════════════════════════════════════
-//  CHUNK GENERATION
+//  CHUNK GENERATION  — PLAZA DE PASTO
 // ═══════════════════════════════════════════════
 const generatedChunks = new Set();
+
+const SURF_Y    = 3;    // altura del suelo plano
+const POOL_CX   = 0;   // centro de la pileta X
+const POOL_CZ   = 4;   // centro de la pileta Z (ligeramente al norte del spawn)
+const POOL_R    = 5;   // radio interior de agua
+const POOL_WALL = 6.5; // radio del borde de piedra
+const FOREST_Z  = 22;  // bosque al sur (Z > FOREST_Z)
+
+// Colores adicionales
+BCOL['water']    = 0x1d9de8;  // azul brillante pileta
+BCOL['poolwall'] = 0xe0e0d0;  // borde blanco/gris de la pileta
 
 function generateChunk(cx,cz){
   if(generatedChunks.has(`${cx},${cz}`)) return;
   generatedChunks.add(`${cx},${cz}`);
+
   for(let dx=0;dx<CHUNK;dx++) for(let dz=0;dz<CHUNK;dz++){
     const wx=cx*CHUNK+dx, wz=cz*CHUNK+dz;
-    const h = Math.max(2, Math.floor(fbm(wx,wz)*12)+3);
+
+    // Distancias clave
+    const dPool  = Math.sqrt((wx-POOL_CX)**2+(wz-POOL_CZ)**2);
+    const dMine  = Math.sqrt((wx-ME_X)**2+(wz-ME_Z)**2);
 
     // Bedrock y=0
     sB(wx,0,wz,'bedrock');
+    // Suelo de relleno
+    for(let y=1;y<SURF_Y;y++) sB(wx,y,wz,'stone');
 
-    // Surface
-    for(let y=1;y<=h;y++){
-      let t;
-      if(y===h)        t = h<4?'sand': h>13?'snow':'grass';
-      else if(y>=h-2)  t = 'dirt';
-      else             t = 'stone';
-      sB(wx,y,wz,t);
+    // ── PILETA ──────────────────────────────────
+    if(dPool < POOL_WALL){
+      if(dPool < POOL_R){
+        // Interior: agua
+        sB(wx,SURF_Y-1,wz,'stone');   // fondo
+        sB(wx,SURF_Y,  wz,'water');   // superficie azul
+        // Agua más profunda en el centro
+        if(dPool < POOL_R-1) sB(wx,SURF_Y-2,wz,'stone');
+      } else {
+        // Borde de la pileta (1-2 bloques de altura)
+        sB(wx,SURF_Y,  wz,'poolwall');
+        sB(wx,SURF_Y+1,wz,'poolwall');
+        // Esquinas decorativas más altas
+        if(dPool > POOL_WALL-1.2) sB(wx,SURF_Y+2,wz,'poolwall');
+      }
+      continue; // no sobreescribir con pasto/bosque
     }
 
-    // Trees (surface only, away from mine entrance)
-    const dist2Mine = Math.sqrt((wx-ME_X)**2+(wz-ME_Z)**2);
-    if(h>=4&&h<=12&&dist2Mine>8&&n1(wx,wz,1)>0.87){
-      const th=4+((n1(wx,wz,2)*2)|0);
-      for(let ty=h+1;ty<=h+th;ty++) sB(wx,ty,wz,'wood');
-      for(let lx=-2;lx<=2;lx++) for(let lz=-2;lz<=2;lz++) for(let ly=0;ly<=1;ly++)
-        if((Math.abs(lx)+Math.abs(lz))<4&&!gB(wx+lx,h+th+ly,wz+lz))
-          sB(wx+lx,h+th+ly,wz+lz,'leaves');
+    // ── BOSQUE AL SUR ───────────────────────────
+    if(wz > FOREST_Z){
+      sB(wx,SURF_Y,  wz,'grass');
+      sB(wx,SURF_Y-1,wz,'dirt');
+      // Árboles densos (sin restricción de mina)
+      if(n1(wx,wz,1) > 0.78){
+        const th = 4 + ((n1(wx,wz,2)*3)|0);
+        for(let ty=SURF_Y+1;ty<=SURF_Y+th;ty++) sB(wx,ty,wz,'wood');
+        for(let lx=-2;lx<=2;lx++) for(let lz=-2;lz<=2;lz++) for(let ly=0;ly<=2;ly++)
+          if((Math.abs(lx)+Math.abs(lz))<4 && !gB(wx+lx,SURF_Y+th+ly,wz+lz))
+            sB(wx+lx,SURF_Y+th+ly,wz+lz,'leaves');
+      }
+      continue;
     }
+
+    // ── PLAZA DE PASTO ──────────────────────────
+    sB(wx,SURF_Y,  wz,'grass');
+    sB(wx,SURF_Y-1,wz,'dirt');
+
+    // Camino de piedra de la pileta hacia la mina (norte)
+    if(Math.abs(wx - POOL_CX) <= 1 && wz < POOL_CZ && wz > ME_Z+2)
+      sB(wx,SURF_Y,wz,'stone');
+    // Camino hacia el bosque (sur)
+    if(Math.abs(wx - POOL_CX) <= 1 && wz > POOL_CZ+POOL_WALL && wz < FOREST_Z)
+      sB(wx,SURF_Y,wz,'stone');
+
+    // Flores / decoración aleatoria (no en caminos)
+    // (sin bloque flor propio — dejamos el pasto limpio y alegre)
   }
+}
+
+// ── Decoración de la pileta: chorros y escalones (post-gen) ──
+function decoratePool(){
+  // Escalones de acceso (4 puntos cardinales)
+  const pts = [[POOL_CX,POOL_CZ+POOL_WALL],[POOL_CX,POOL_CZ-POOL_WALL],
+               [POOL_CX+POOL_WALL,POOL_CZ],[POOL_CX-POOL_WALL,POOL_CZ]];
+  for(const [px,pz] of pts){
+    sB(Math.round(px),SURF_Y,Math.round(pz),'stone');      // escalón bajo
+    sB(Math.round(px),SURF_Y+1,Math.round(pz),null);       // abrir paso
+  }
+  // Surtidor central: columna de agua 2 bloques hacia arriba
+  sB(POOL_CX,SURF_Y+1,POOL_CZ,'water');
+  sB(POOL_CX,SURF_Y+2,POOL_CZ,'water');
+  sB(POOL_CX,SURF_Y+3,POOL_CZ,'water');
 }
 
 // ═══════════════════════════════════════════════
@@ -526,9 +586,8 @@ function generateChunk(cx,cz){
 // ═══════════════════════════════════════════════
 function carveMine(){
   // ── Entrance arch (wooden frame) ──
-  // Find surface height at mine entrance
-  let surfH = 4;
-  for(let y=WH;y>=0;y--) if(gB(ME_X,y,ME_Z)){surfH=y;break;}
+  // Plaza map: terrain is flat at SURF_Y
+  let surfH = SURF_Y;
 
   // Shaft: 3 wide (X: ME_X to ME_X+2), from surface down to y=1
   for(let sx=ME_X-1;sx<=ME_X+3;sx++){
@@ -625,15 +684,19 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.shadowMap.enabled=true;
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x87ceeb);
-scene.fog=new THREE.Fog(0x87ceeb,20,RDIST*CHUNK*1.3);
+scene.background=new THREE.Color(0x6dd5fa);   // cielo azul vibrante
+scene.fog=new THREE.Fog(0x6dd5fa,35,RDIST*CHUNK*1.8);
 
 const _fov = (('ontouchstart' in window)||navigator.maxTouchPoints>0) ? 60 : 75;
 const camera=new THREE.PerspectiveCamera(_fov,window.innerWidth/window.innerHeight,.1,200);
 
-const ambLight=new THREE.AmbientLight(0xffffff,.55); scene.add(ambLight);
-const sun=new THREE.DirectionalLight(0xfff5dd,.9);
-sun.position.set(60,120,40); sun.castShadow=true; scene.add(sun);
+// Iluminación diurna alegre
+const ambLight=new THREE.AmbientLight(0xffffff,.90); scene.add(ambLight);
+const sun=new THREE.DirectionalLight(0xfffbe0,1.3);
+sun.position.set(80,160,60); sun.castShadow=true; scene.add(sun);
+// Relleno de cielo (suaviza sombras duras)
+const skyFill=new THREE.DirectionalLight(0xb0d8ff,.35);
+skyFill.position.set(-40,60,-30); scene.add(skyFill);
 
 // Cave atmosphere lights
 const caveAmb   = new THREE.AmbientLight(0x334455,.0); scene.add(caveAmb);
@@ -826,23 +889,17 @@ let score=0;
 let thirdPerson=false; // overridden to true on mobile after isMobile is set
 
 function spawnPlayer(){
-  // Pre-generate chunks for mine
-  for(let cx=-2;cx<=5;cx++) for(let cz=-5;cz<=2;cz++) generateChunk(cx,cz);
+  // Pre-generate chunks: plaza + bosque sur + mina norte
+  for(let cx=-4;cx<=5;cx++) for(let cz=-5;cz<=5;cz++) generateChunk(cx,cz);
   carveMine();
-  for(let cx=-2;cx<=5;cx++) for(let cz=-5;cz<=2;cz++) buildChunkMesh(cx,cz);
+  decoratePool();
+  for(let cx=-4;cx<=5;cx++) for(let cz=-5;cz<=5;cz++) buildChunkMesh(cx,cz);
 
-  // Find a clear spawn: scan a 5x5 area near origin, pick spot with lowest topY (open sky)
-  let bestX=0, bestZ=0, bestTop=WH;
-  for(let sx=-2;sx<=2;sx++) for(let sz=-2;sz<=2;sz++){
-    // Skip spots too close to mine entrance (ME_X, ME_Z)
-    if(Math.abs(sx-ME_X)<6 && Math.abs(sz-ME_Z)<6) continue;
-    let top=2;
-    for(let y=WH;y>=0;y--){ if(gB(sx,y,sz)){ top=y; break; } }
-    if(top < bestTop){ bestTop=top; bestX=sx; bestZ=sz; }
-  }
-  // Spawn 3 blocks above the highest terrain (clears trees since we picked lowest top)
-  player.x = bestX; player.z = bestZ;
-  player.y = bestTop + 3;
+  // Spawn al sur de la pileta, mirando hacia ella (norte)
+  player.x = POOL_CX + 0.5;
+  player.z = POOL_CZ + POOL_WALL + 4;
+  player.y = SURF_Y + 2;
+  player.yaw = Math.PI; // mirando al norte (hacia la pileta)
   player.vy = 0;
 
   // On mobile always start in third person
@@ -1215,7 +1272,7 @@ function updateCamera(dt,moving){
 // ═══════════════════════════════════════════════
 //  ATMOSPHERE (surface vs cave)
 // ═══════════════════════════════════════════════
-const SKY_COLOR  = new THREE.Color(0x87ceeb);
+const SKY_COLOR  = new THREE.Color(0x6dd5fa);
 const CAVE_COLOR = new THREE.Color(0x1a1a22);
 let inCave=false;
 const zoneEl=document.getElementById('zone-indicator');
@@ -1233,8 +1290,8 @@ function updateAtmosphere(){
       zoneEl.textContent='⛏ MINA'; zoneEl.style.color='#aaa';
     } else {
       scene.background=SKY_COLOR;
-      scene.fog=new THREE.Fog(0x87ceeb,20,RDIST*CHUNK*1.3);
-      ambLight.intensity=.55;
+      scene.fog=new THREE.Fog(0x6dd5fa,35,RDIST*CHUNK*1.8);
+      ambLight.intensity=.90;
       caveAmb.intensity=.0;
       sun.intensity=.9;
       zoneEl.textContent='🌿 SUPERFICIE'; zoneEl.style.color='#4ade80';
