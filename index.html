@@ -830,8 +830,27 @@ function spawnPlayer(){
   for(let cx=-2;cx<=5;cx++) for(let cz=-5;cz<=2;cz++) generateChunk(cx,cz);
   carveMine();
   for(let cx=-2;cx<=5;cx++) for(let cz=-5;cz<=2;cz++) buildChunkMesh(cx,cz);
-  // Find surface at 0,0
-  for(let y=WH;y>=0;y--) if(gB(0,y,0)){player.y=y+2;break;}
+
+  // Find a clear spawn: scan a 5x5 area near origin, pick spot with lowest topY (open sky)
+  let bestX=0, bestZ=0, bestTop=WH;
+  for(let sx=-2;sx<=2;sx++) for(let sz=-2;sz<=2;sz++){
+    // Skip spots too close to mine entrance (ME_X, ME_Z)
+    if(Math.abs(sx-ME_X)<6 && Math.abs(sz-ME_Z)<6) continue;
+    let top=2;
+    for(let y=WH;y>=0;y--){ if(gB(sx,y,sz)){ top=y; break; } }
+    if(top < bestTop){ bestTop=top; bestX=sx; bestZ=sz; }
+  }
+  // Spawn 3 blocks above the highest terrain (clears trees since we picked lowest top)
+  player.x = bestX; player.z = bestZ;
+  player.y = bestTop + 3;
+  player.vy = 0;
+
+  // On mobile always start in third person
+  if(isMobile){
+    thirdPerson = true;
+    player.pitch = 0;
+    document.getElementById('view-btn').textContent = '👁 1ª Persona [T]';
+  }
 }
 
 // ═══════════════════════════════════════════════
