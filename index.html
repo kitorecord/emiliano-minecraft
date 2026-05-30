@@ -840,7 +840,8 @@ function spawnPlayer(){
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 if(isMobile){
-  thirdPerson = true; // siempre tercera persona en móvil
+  thirdPerson = true;    // siempre tercera persona en móvil
+  player.pitch = 0;      // ángulo neutro al iniciar
   // Show mobile UI elements
   document.getElementById('joy-zone').style.display = 'block';
   document.getElementById('mobile-btns').style.display = 'flex';
@@ -1154,13 +1155,24 @@ function updateHealth(){ document.getElementById('health-fill').style.width=play
 let walkT=0;
 function updateCamera(dt,moving){
   if(thirdPerson){
-    // Third person: orbit behind player — more distance on mobile to see full character
-    const dist = isMobile ? 7.5 : 4.5;
-    const camX=player.x+Math.sin(player.yaw)*dist;
-    const camZ=player.z+Math.cos(player.yaw)*dist;
-    const camY=player.y+player.height+(isMobile ? 1.5 : 0)+Math.sin(Math.max(-.4,player.pitch))*dist;
-    camera.position.set(camX,camY,camZ);
-    camera.lookAt(player.x, player.y+player.height*.4, player.z);
+    if(isMobile){
+      // Mobile: pure overhead — camera way above, tiny forward tilt
+      // hDist=2 just to show player's face; Y=16 always above trees/terrain
+      const hDist = 2.5;
+      const camX = player.x + Math.sin(player.yaw) * hDist;
+      const camZ = player.z + Math.cos(player.yaw) * hDist;
+      const camY = player.y + 16;   // trees max ~18 world-Y, player always on surface or underground
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(player.x, player.y + 0.9, player.z);
+    } else {
+      // Desktop: full orbit
+      const dist=4.5;
+      const camX=player.x+Math.sin(player.yaw)*dist;
+      const camZ=player.z+Math.cos(player.yaw)*dist;
+      const camY=player.y+player.height+Math.sin(Math.max(-.4,player.pitch))*dist;
+      camera.position.set(camX,camY,camZ);
+      camera.lookAt(player.x, player.y+player.height*.55, player.z);
+    }
 
     // Steve visible
     steve.visible=true;
