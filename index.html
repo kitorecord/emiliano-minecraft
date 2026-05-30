@@ -246,6 +246,77 @@ body { background:#000; overflow:hidden; font-family:'Courier New',monospace; }
   transition:color .2s, border-color .2s;
 }
 #cover-btn:hover { color:#fff; border-color:#888; }
+
+/* ── Mobile viewport fix ── */
+@media (max-width: 768px) {
+  #top-hud { padding:8px 10px; }
+  #health-track { width:110px; }
+  #score-num { font-size:16px; }
+  #toolbar { bottom:180px; gap:6px; transform:translateX(-50%) scale(.85); transform-origin:bottom center; }
+  #view-btn  { bottom:140px; right:10px; font-size:11px; padding:6px 10px; }
+  #music-btn { bottom:174px; right:10px; font-size:11px; padding:6px 10px; }
+  #debug-toggle { display:none; }
+  #dbg { display:none; }
+  #crosshair { display:none; }
+  .mc-title { font-size:clamp(1.4rem,6vw,2.4rem); }
+  #overlay-bottom { grid-template-columns:1fr; }
+  .inst-col { border-right:none; border-bottom:1px solid #444; padding:10px 16px; }
+  .inst-col:last-child { border-bottom:none; }
+}
+
+/* ── Virtual joystick ── */
+#joy-zone {
+  display:none;
+  position:fixed; bottom:24px; left:20px;
+  width:130px; height:130px;
+  z-index:90; pointer-events:all;
+}
+#joy-base {
+  width:130px; height:130px; border-radius:50%;
+  background:rgba(255,255,255,.12);
+  border:3px solid rgba(255,255,255,.3);
+  position:absolute; top:0; left:0;
+}
+#joy-thumb {
+  width:52px; height:52px; border-radius:50%;
+  background:rgba(255,255,255,.45);
+  border:2px solid rgba(255,255,255,.7);
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  transition:background .1s;
+}
+
+/* ── Mobile action buttons ── */
+#mobile-btns {
+  display:none;
+  position:fixed; bottom:24px; right:16px;
+  z-index:90; pointer-events:all;
+  display:none;
+  flex-direction:column; align-items:flex-end; gap:10px;
+}
+.mob-btn {
+  width:64px; height:64px; border-radius:50%;
+  background:rgba(0,0,0,.55);
+  border:3px solid rgba(255,255,255,.4);
+  color:#fff; font-size:22px;
+  display:flex; align-items:center; justify-content:center;
+  user-select:none; -webkit-user-select:none;
+  cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+.mob-btn:active { background:rgba(255,255,255,.25); }
+#mob-jump { background:rgba(80,180,80,.55); border-color:#4ade80; font-size:18px; }
+#mob-place { background:rgba(60,120,220,.55); border-color:#60a5fa; font-size:18px; }
+#mob-break { background:rgba(200,60,60,.55); border-color:#f87171; font-size:18px; }
+
+/* Touch camera zone hint */
+#touch-look-zone {
+  display:none;
+  position:fixed; top:0; right:0;
+  width:60%; height:100%;
+  z-index:80; pointer-events:none;
+}
 </style>
 </head>
 <body>
@@ -292,6 +363,22 @@ body { background:#000; overflow:hidden; font-family:'Courier New',monospace; }
   </div>
 </div>
 
+<!-- Virtual joystick (mobile) -->
+<div id="joy-zone">
+  <div id="joy-base"></div>
+  <div id="joy-thumb"></div>
+</div>
+
+<!-- Mobile action buttons -->
+<div id="mobile-btns">
+  <div class="mob-btn" id="mob-jump">⬆<br><span style="font-size:10px">SALTAR</span></div>
+  <div class="mob-btn" id="mob-place">🧱<br><span style="font-size:10px">PONER</span></div>
+  <div class="mob-btn" id="mob-break">⛏<br><span style="font-size:10px">ROMPER</span></div>
+</div>
+
+<!-- Touch camera zone (right side) -->
+<div id="touch-look-zone"></div>
+
 <!-- Overlay / Pantalla de inicio -->
 <div id="overlay">
   <canvas id="overlay-bg" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;"></canvas>
@@ -313,12 +400,19 @@ body { background:#000; overflow:hidden; font-family:'Courier New',monospace; }
 
   <!-- INSTRUCCIONES abajo -->
   <div id="overlay-bottom">
-    <div class="inst-col">
+    <div class="inst-col" id="inst-desktop">
       <div class="inst-head">MOVIMIENTO</div>
       <div class="inst-row"><span class="kbd">↑ ↓ ← →</span> Moverse</div>
       <div class="inst-row"><span class="kbd">Mouse</span> Girar cámara</div>
       <div class="inst-row"><span class="kbd">Shift</span> Saltar</div>
       <div class="inst-row"><span class="kbd">T</span> 1ª / 3ª persona</div>
+    </div>
+    <div class="inst-col" id="inst-mobile" style="display:none">
+      <div class="inst-head">CONTROLES TÁCTILES</div>
+      <div class="inst-row">🕹 <strong style="margin-left:4px">Joystick izq</strong> — Moverse</div>
+      <div class="inst-row">👆 <strong style="margin-left:4px">Deslizar der</strong> — Cámara</div>
+      <div class="inst-row">⬆ <strong style="margin-left:4px">SALTAR</strong> — botón verde</div>
+      <div class="inst-row">🧱⛏ <strong style="margin-left:4px">Poner / Romper</strong> bloques</div>
     </div>
     <div class="inst-col">
       <div class="inst-head">ACCIONES</div>
@@ -740,6 +834,123 @@ function spawnPlayer(){
 }
 
 // ═══════════════════════════════════════════════
+//  MOBILE DETECTION
+// ═══════════════════════════════════════════════
+const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+if(isMobile){
+  // Show mobile UI elements
+  document.getElementById('joy-zone').style.display = 'block';
+  document.getElementById('mobile-btns').style.display = 'flex';
+  document.getElementById('touch-look-zone').style.display = 'block';
+  document.getElementById('inst-desktop').style.display = 'none';
+  document.getElementById('inst-mobile').style.display  = 'flex';
+  // Hide pointer-lock hint (not needed on mobile)
+  document.getElementById('resume-hint').style.display = 'none';
+  // Add meta viewport for correct touch scaling
+  const vm = document.createElement('meta');
+  vm.name='viewport'; vm.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no';
+  document.head.appendChild(vm);
+}
+
+// ═══════════════════════════════════════════════
+//  VIRTUAL JOYSTICK
+// ═══════════════════════════════════════════════
+const joy = { dx:0, dy:0, active:false, id:-1, startX:0, startY:0 };
+const JOY_RADIUS = 40; // max thumb offset
+
+const joyZone  = document.getElementById('joy-zone');
+const joyThumb = document.getElementById('joy-thumb');
+
+function joyUpdate(cx,cy){
+  const rect = joyZone.getBoundingClientRect();
+  const ox = cx - (rect.left + rect.width/2);
+  const oy = cy - (rect.top  + rect.height/2);
+  const dist = Math.sqrt(ox*ox+oy*oy);
+  const clamped = Math.min(dist, JOY_RADIUS);
+  const angle = Math.atan2(oy,ox);
+  const nx = Math.cos(angle)*clamped;
+  const ny = Math.sin(angle)*clamped;
+  joyThumb.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+  joy.dx = nx / JOY_RADIUS;
+  joy.dy = ny / JOY_RADIUS;
+}
+
+joyZone.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  joy.active = true; joy.id = t.identifier;
+  joyUpdate(t.clientX, t.clientY);
+},{passive:false});
+
+joyZone.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier===joy.id) joyUpdate(t.clientX,t.clientY);
+  }
+},{passive:false});
+
+joyZone.addEventListener('touchend', e=>{
+  e.preventDefault();
+  joy.active=false; joy.dx=0; joy.dy=0;
+  joyThumb.style.transform='translate(-50%,-50%)';
+},{passive:false});
+
+// ═══════════════════════════════════════════════
+//  TOUCH CAMERA (right 60% of screen)
+// ═══════════════════════════════════════════════
+const touchCam = { active:false, id:-1, lastX:0, lastY:0 };
+
+document.addEventListener('touchstart', e=>{
+  if(!gameRunning) return;
+  for(const t of e.changedTouches){
+    // Only capture touches that start on the right side
+    const jRect = joyZone.getBoundingClientRect();
+    const onJoy = t.clientX >= jRect.left && t.clientX <= jRect.right &&
+                  t.clientY >= jRect.top  && t.clientY <= jRect.bottom;
+    if(!onJoy && !touchCam.active && t.clientX > window.innerWidth * 0.35){
+      touchCam.active=true; touchCam.id=t.identifier;
+      touchCam.lastX=t.clientX; touchCam.lastY=t.clientY;
+    }
+  }
+},{passive:true});
+
+document.addEventListener('touchmove', e=>{
+  if(!gameRunning) return;
+  for(const t of e.changedTouches){
+    if(t.identifier===touchCam.id){
+      const dx = t.clientX - touchCam.lastX;
+      const dy = t.clientY - touchCam.lastY;
+      player.yaw  -= dx * 0.004;
+      player.pitch -= dy * 0.004;
+      player.pitch = Math.max(-Math.PI/2+.01, Math.min(Math.PI/2-.01, player.pitch));
+      touchCam.lastX = t.clientX; touchCam.lastY = t.clientY;
+    }
+  }
+},{passive:true});
+
+document.addEventListener('touchend', e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier===touchCam.id){ touchCam.active=false; touchCam.id=-1; }
+  }
+},{passive:true});
+
+// ═══════════════════════════════════════════════
+//  MOBILE ACTION BUTTONS
+// ═══════════════════════════════════════════════
+let mobJumpHeld = false;
+const mobJumpBtn  = document.getElementById('mob-jump');
+const mobPlaceBtn = document.getElementById('mob-place');
+const mobBreakBtn = document.getElementById('mob-break');
+
+mobJumpBtn.addEventListener('touchstart',  e=>{ e.preventDefault(); mobJumpHeld=true;  },{passive:false});
+mobJumpBtn.addEventListener('touchend',    e=>{ e.preventDefault(); mobJumpHeld=false; },{passive:false});
+mobJumpBtn.addEventListener('touchcancel', e=>{ e.preventDefault(); mobJumpHeld=false; },{passive:false});
+
+mobPlaceBtn.addEventListener('touchstart', e=>{ e.preventDefault(); if(gameRunning) raycastBlock(false); },{passive:false});
+mobBreakBtn.addEventListener('touchstart', e=>{ e.preventDefault(); if(gameRunning) raycastBlock(true);  },{passive:false});
+
+// ═══════════════════════════════════════════════
 //  INPUT
 // ═══════════════════════════════════════════════
 const keys={};
@@ -775,7 +986,7 @@ let pointerLocked=false;
 const resumeEl=document.getElementById('resume-hint');
 document.addEventListener('pointerlockchange',()=>{
   pointerLocked=document.pointerLockElement===renderer.domElement;
-  if(gameRunning) resumeEl.style.display=pointerLocked?'none':'flex';
+  if(gameRunning&&!isMobile) resumeEl.style.display=pointerLocked?'none':'flex';
 });
 // Re-lock al hacer clic en el canvas cuando el juego está corriendo
 renderer.domElement.addEventListener('click',()=>{
@@ -891,13 +1102,22 @@ function physicsStep(dt){
   const G=-22,S=5,J=7.2;
   const sin=Math.sin(player.yaw),cos=Math.cos(player.yaw);
   let mx=0,mz=0;
-  if(keys['ArrowUp']  ||keys['KeyW']){mx-=sin;mz-=cos;}
-  if(keys['ArrowDown']||keys['KeyS']){mx+=sin;mz+=cos;}
-  if(keys['ArrowLeft']||keys['KeyA']){mx-=cos;mz+=sin;}
-  if(keys['ArrowRight']||keys['KeyD']){mx+=cos;mz-=sin;}
+
+  if(isMobile && joy.active){
+    // Joystick: joy.dx = right, joy.dy = down (screen Y)
+    mx = -joy.dy * (-sin) + joy.dx * cos;
+    mz = -joy.dy * (-cos) + joy.dx * (-sin);
+  } else {
+    if(keys['ArrowUp']  ||keys['KeyW']){mx-=sin;mz-=cos;}
+    if(keys['ArrowDown']||keys['KeyS']){mx+=sin;mz+=cos;}
+    if(keys['ArrowLeft']||keys['KeyA']){mx-=cos;mz+=sin;}
+    if(keys['ArrowRight']||keys['KeyD']){mx+=cos;mz-=sin;}
+  }
+
   const l=Math.sqrt(mx*mx+mz*mz)||1; if(mx||mz){mx/=l;mz/=l;}
   player.vx=mx*S; player.vz=mz*S; player.vy+=G*dt;
-  if(player.onGround&&keys['ShiftLeft']) player.vy=J;
+  const wantsJump = keys['ShiftLeft'] || (isMobile && mobJumpHeld);
+  if(player.onGround && wantsJump) player.vy=J;
 
   // Detectar si el jugador ya está atrapado en un bloque
   if(collides(player.x,player.y,player.z)){
@@ -1028,7 +1248,7 @@ function loop(time){
   updateChunks(player.x,player.z);
   physicsStep(dt);
 
-  const moving=keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight']||keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'];
+  const moving=keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight']||keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||(isMobile&&joy.active&&(Math.abs(joy.dx)>.1||Math.abs(joy.dy)>.1));
   updateCamera(dt,!!moving);
   updateAtmosphere();
   animateDiamonds(dt);
@@ -1251,7 +1471,7 @@ document.getElementById('cover-input').addEventListener('change', e=>{
 
 document.getElementById('startBtn').addEventListener('click',()=>{
   document.getElementById('overlay').style.display='none';
-  renderer.domElement.requestPointerLock();
+  if(!isMobile) renderer.domElement.requestPointerLock();
   if(!gameRunning){
     gameRunning=true;
     spawnPlayer();
