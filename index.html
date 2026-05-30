@@ -923,6 +923,8 @@ if(isMobile){
   document.getElementById('touch-look-zone').style.display = 'block';
   document.getElementById('inst-desktop').style.display = 'none';
   document.getElementById('inst-mobile').style.display  = 'flex';
+  // Ocultar botón de cambio de vista en mobile (siempre 3a persona)
+  document.getElementById('view-btn').style.display = 'none';
   // Hide pointer-lock hint (not needed on mobile)
   document.getElementById('resume-hint').style.display = 'none';
   // Add meta viewport for correct touch scaling
@@ -1337,6 +1339,9 @@ function loop(time){
 
   updateChunks(player.x,player.z);
   physicsStep(dt);
+
+  // En mobile siempre tercera persona — nunca puede quedar en primera
+  if(isMobile) thirdPerson = true;
 
   const moving=keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight']||keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||(isMobile&&joy.active&&(Math.abs(joy.dx)>.1||Math.abs(joy.dy)>.1));
   updateCamera(dt,!!moving);
