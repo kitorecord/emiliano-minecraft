@@ -1279,7 +1279,7 @@ const zoneEl=document.getElementById('zone-indicator');
 
 function updateAtmosphere(){
   const wasInCave=inCave;
-  inCave = player.y < 6;
+  inCave = player.y < (SURF_Y - 1);  // solo bajo el suelo de la plaza
   if(inCave!==wasInCave){
     if(inCave){
       scene.background=CAVE_COLOR;
