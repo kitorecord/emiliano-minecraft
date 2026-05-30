@@ -1231,14 +1231,15 @@ let walkT=0;
 function updateCamera(dt,moving){
   if(thirdPerson){
     if(isMobile){
-      // Mobile: pure overhead — camera way above, tiny forward tilt
-      // hDist=2 just to show player's face; Y=16 always above trees/terrain
-      const hDist = 2.5;
+      // Mobile: Minecraft PE style — detrás y levemente arriba
+      // ángulo ~24° hacia abajo → se ve horizonte + personaje completo
+      const hDist = 9.0;   // lejos horizontalmente
+      const vDist = 4.0;   // poco más arriba que el jugador
       const camX = player.x + Math.sin(player.yaw) * hDist;
       const camZ = player.z + Math.cos(player.yaw) * hDist;
-      const camY = player.y + 16;   // trees max ~18 world-Y, player always on surface or underground
+      const camY = player.y + vDist;
       camera.position.set(camX, camY, camZ);
-      camera.lookAt(player.x, player.y + 0.9, player.z);
+      camera.lookAt(player.x, player.y + 1.0, player.z);
     } else {
       // Desktop: full orbit
       const dist=4.5;
