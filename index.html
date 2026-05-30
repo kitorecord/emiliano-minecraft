@@ -628,7 +628,8 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x87ceeb);
 scene.fog=new THREE.Fog(0x87ceeb,20,RDIST*CHUNK*1.3);
 
-const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,.1,200);
+const _fov = (('ontouchstart' in window)||navigator.maxTouchPoints>0) ? 60 : 75;
+const camera=new THREE.PerspectiveCamera(_fov,window.innerWidth/window.innerHeight,.1,200);
 
 const ambLight=new THREE.AmbientLight(0xffffff,.55); scene.add(ambLight);
 const sun=new THREE.DirectionalLight(0xfff5dd,.9);
@@ -822,7 +823,7 @@ function rebuildAt(bx,by,bz){
 // ═══════════════════════════════════════════════
 const player={x:0,y:8,z:0,vx:0,vy:0,vz:0,yaw:0,pitch:.15,onGround:false,height:1.8,width:.6,hp:100};
 let score=0;
-let thirdPerson=false;
+let thirdPerson=false; // overridden to true on mobile after isMobile is set
 
 function spawnPlayer(){
   // Pre-generate chunks for mine
@@ -839,6 +840,7 @@ function spawnPlayer(){
 const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 if(isMobile){
+  thirdPerson = true; // siempre tercera persona en móvil
   // Show mobile UI elements
   document.getElementById('joy-zone').style.display = 'block';
   document.getElementById('mobile-btns').style.display = 'flex';
@@ -1152,13 +1154,13 @@ function updateHealth(){ document.getElementById('health-fill').style.width=play
 let walkT=0;
 function updateCamera(dt,moving){
   if(thirdPerson){
-    // Third person: orbit behind player
-    const dist=4.5;
+    // Third person: orbit behind player — more distance on mobile to see full character
+    const dist = isMobile ? 7.5 : 4.5;
     const camX=player.x+Math.sin(player.yaw)*dist;
     const camZ=player.z+Math.cos(player.yaw)*dist;
-    const camY=player.y+player.height+Math.sin(Math.max(-.4,player.pitch))*dist;
+    const camY=player.y+player.height+(isMobile ? 1.5 : 0)+Math.sin(Math.max(-.4,player.pitch))*dist;
     camera.position.set(camX,camY,camZ);
-    camera.lookAt(player.x, player.y+player.height*.55, player.z);
+    camera.lookAt(player.x, player.y+player.height*.4, player.z);
 
     // Steve visible
     steve.visible=true;
