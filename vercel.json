@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "emiliano-minecraft",
+  "buildCommand": null,
+  "outputDirectory": ".",
+  "routes": [
+    {
+      "src": "/api/visits",
+      "dest": "/api/visits.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
