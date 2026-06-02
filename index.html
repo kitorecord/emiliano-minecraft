@@ -687,6 +687,23 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x6dd5fa);   // cielo azul vibrante
 scene.fog=new THREE.Fog(0x6dd5fa,35,RDIST*CHUNK*1.8);
 
+// ── DÍA / NOCHE ──────────────────────────────────
+let gameTime = 0.30;          // 0=medianoche  0.5=mediodía
+const DAY_SPEED = 1/480;      // ciclo completo ~8 min reales
+const SKY_TIMES = [
+  [0.00, 0x040410], [0.18, 0x1a0e38], [0.25, 0xff6a2a],
+  [0.32, 0x87ceeb], [0.50, 0x6dd5fa], [0.68, 0x87ceeb],
+  [0.75, 0xff5518], [0.84, 0x1a0e38], [1.00, 0x040410],
+];
+function skyColorAt(t){
+  let a=SKY_TIMES[0],b=SKY_TIMES[SKY_TIMES.length-1];
+  for(let i=0;i<SKY_TIMES.length-1;i++){
+    if(t>=SKY_TIMES[i][0]&&t<=SKY_TIMES[i+1][0]){a=SKY_TIMES[i];b=SKY_TIMES[i+1];break;}
+  }
+  const f=(t-a[0])/(b[0]-a[0]);
+  return new THREE.Color(a[1]).lerp(new THREE.Color(b[1]),f);
+}
+
 const _fov = (('ontouchstart' in window)||navigator.maxTouchPoints>0) ? 60 : 75;
 const camera=new THREE.PerspectiveCamera(_fov,window.innerWidth/window.innerHeight,.1,200);
 
@@ -703,6 +720,115 @@ const caveAmb   = new THREE.AmbientLight(0x334455,.0); scene.add(caveAmb);
 const torchLight = new THREE.PointLight(0xff8833,1.8,12); scene.add(torchLight);
 const redGlow   = new THREE.PointLight(0xff2222,1.4,9); scene.add(redGlow);
 const blueGlow  = new THREE.PointLight(0x4488ff,1.4,9); scene.add(blueGlow);
+
+// ── SOL ──────────────────────────────────────────
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(5,10,10),
+  new THREE.MeshBasicMaterial({color:0xfffbe0})
+);
+scene.add(sunMesh);
+// Halo del sol
+const sunHaloMat = new THREE.MeshBasicMaterial({color:0xffcc44,transparent:true,opacity:0.18,side:THREE.DoubleSide});
+const sunHalo = new THREE.Mesh(new THREE.SphereGeometry(9,10,10), sunHaloMat);
+sunMesh.add(sunHalo);
+
+// ── LUNA ─────────────────────────────────────────
+const moonMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(3,10,10),
+  new THREE.MeshBasicMaterial({color:0xd8e8ff})
+);
+scene.add(moonMesh);
+
+// ── ESTRELLAS ────────────────────────────────────
+let starPoints;
+(function buildStars(){
+  const N=800; const sp=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const th=Math.random()*Math.PI*2, ph=Math.random()*Math.PI;
+    sp[i*3  ]=Math.sin(ph)*Math.cos(th)*95;
+    sp[i*3+1]=Math.abs(Math.cos(ph))*95+5;
+    sp[i*3+2]=Math.sin(ph)*Math.sin(th)*95;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(sp,3));
+  const m=new THREE.PointsMaterial({color:0xffffff,size:0.55,transparent:true,opacity:0});
+  starPoints=new THREE.Points(g,m); scene.add(starPoints);
+})();
+
+// ── AGUA ANIMADA ──────────────────────────────────
+const waterMat = new THREE.MeshPhongMaterial({
+  color:0x2ab5f5,emissive:0x0a3a5a,transparent:true,opacity:0.78,
+  specular:0x99eeff,shininess:320,side:THREE.DoubleSide
+});
+let poolSurface = null;
+function buildPoolSurface(){
+  if(poolSurface) return;
+  const geo = new THREE.CylinderGeometry(POOL_R, POOL_R, 0.05, 32);
+  poolSurface = new THREE.Mesh(geo, waterMat);
+  poolSurface.position.set(POOL_CX+0.5, SURF_Y+0.08, POOL_CZ+0.5);
+  scene.add(poolSurface);
+}
+function animateWater(time){
+  if(!poolSurface) return;
+  const t=time*0.001;
+  const w=Math.sin(t*1.8)*0.5+0.5;
+  waterMat.color.setHex(w>0.5?0x33bbf8:0x1592d0);
+  waterMat.emissive.setHex(w>0.5?0x0d4e6e:0x07263a);
+  waterMat.opacity=0.68+Math.sin(t*1.2)*0.10;
+  // Ondas sutiles rotando la malla
+  poolSurface.rotation.y=t*0.15;
+}
+
+// ── SISTEMA DE PARTÍCULAS ────────────────────────
+const MAX_PARTICLES=400;
+const pPositions=new Float32Array(MAX_PARTICLES*3);
+const pColors   =new Float32Array(MAX_PARTICLES*3);
+for(let i=0;i<MAX_PARTICLES;i++) pPositions[i*3+1]=-9999;
+const particles=Array.from({length:MAX_PARTICLES},()=>
+  ({active:false,x:0,y:0,z:0,vx:0,vy:0,vz:0,life:0,maxLife:1,r:1,g:1,b:1}));
+const pGeo=new THREE.BufferGeometry();
+pGeo.setAttribute('position',new THREE.BufferAttribute(pPositions,3));
+pGeo.setAttribute('color',   new THREE.BufferAttribute(pColors,3));
+const pMat=new THREE.PointsMaterial({size:0.20,vertexColors:true,transparent:true,depthWrite:false});
+const pSystem=new THREE.Points(pGeo,pMat); scene.add(pSystem);
+
+function spawnParticle(x,y,z,vx,vy,vz,life,r,g,b){
+  const p=particles.find(p=>!p.active); if(!p) return;
+  Object.assign(p,{active:true,x,y,z,vx,vy,vz,life,maxLife:life,r,g,b});
+}
+function emitBreakParticles(x,y,z,btype){
+  const c=new THREE.Color(BCOL[btype]||0xaaaaaa);
+  for(let i=0;i<16;i++){
+    const vx=(Math.random()-.5)*5, vy=1.2+Math.random()*3.5, vz=(Math.random()-.5)*5;
+    spawnParticle(x+.5,y+.5,z+.5,vx,vy,vz,.3+Math.random()*.5,c.r,c.g,c.b);
+  }
+}
+function emitLeafParticles(px,pz,dt){
+  if(pz<FOREST_Z-12) return;
+  if(Math.random()<dt*4){
+    const lx=px+(Math.random()-.5)*24;
+    const lz=Math.max(FOREST_Z,pz+(Math.random()-.5)*12);
+    const gr=0.45+Math.random()*.55;
+    spawnParticle(lx,SURF_Y+2+Math.random()*5,lz,
+      (Math.random()-.5)*.6,-0.25-Math.random()*.5,(Math.random()-.5)*.6,
+      2+Math.random()*2, 0.05,gr,0.05);
+  }
+}
+function updateParticles(dt){
+  for(let i=0;i<MAX_PARTICLES;i++){
+    const p=particles[i];
+    if(!p.active){pPositions[i*3+1]=-9999;continue;}
+    p.life-=dt;
+    if(p.life<=0){p.active=false;pPositions[i*3+1]=-9999;continue;}
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt;
+    p.vy-=5.5*dt;
+    pPositions[i*3]=p.x; pPositions[i*3+1]=p.y; pPositions[i*3+2]=p.z;
+    const a=p.life/p.maxLife;
+    pColors[i*3]=p.r*a; pColors[i*3+1]=p.g*a; pColors[i*3+2]=p.b*a;
+  }
+  pGeo.attributes.position.needsUpdate=true;
+  pGeo.attributes.color.needsUpdate=true;
+}
 
 // ═══════════════════════════════════════════════
 //  DIAMONDS (octahedron geometry)
@@ -903,6 +1029,8 @@ function spawnPlayer(){
   player.yaw   = 0;   // mira al norte → cámara queda al sur, fuera del bosque
   player.pitch = 0;
   player.vy    = 0;
+
+  buildPoolSurface();
 
   // Siempre tercera persona al iniciar (mobile y desktop)
   thirdPerson = true;
@@ -1140,6 +1268,7 @@ function raycastBlock(remove){
       const bz=Math.floor(hit.point.z-n.z*eps);
       const t=gB(bx,by,bz);
       if(!t||t==='bedrock') return; // BEDROCK INDESTRUCTIBLE
+      emitBreakParticles(bx,by,bz,t);
       sB(bx,by,bz,null); rebuildAt(bx,by,bz);
     }
   } else {
@@ -1281,7 +1410,7 @@ const zoneEl=document.getElementById('zone-indicator');
 
 function updateAtmosphere(){
   const wasInCave=inCave;
-  inCave = player.y < (SURF_Y - 1);  // solo bajo el suelo de la plaza
+  inCave = player.y < (SURF_Y - 1);
   if(inCave!==wasInCave){
     if(inCave){
       scene.background=CAVE_COLOR;
@@ -1289,27 +1418,21 @@ function updateAtmosphere(){
       ambLight.intensity=.18;
       caveAmb.intensity=.45;
       sun.intensity=.1;
+      sunMesh.visible=false; moonMesh.visible=false;
+      if(starPoints) starPoints.material.opacity=0;
       zoneEl.textContent='⛏ MINA'; zoneEl.style.color='#aaa';
     } else {
-      scene.background=SKY_COLOR;
-      scene.fog=new THREE.Fog(0x6dd5fa,35,RDIST*CHUNK*1.8);
-      ambLight.intensity=.90;
       caveAmb.intensity=.0;
-      sun.intensity=.9;
       zoneEl.textContent='🌿 SUPERFICIE'; zoneEl.style.color='#4ade80';
     }
-    // Flash zone label
     zoneEl.style.opacity='1';
     setTimeout(()=>zoneEl.style.opacity='0',2200);
     zoneEl.style.transition='opacity 1s';
   }
-
-  // Move torch light near player underground
   if(inCave){
     torchLight.position.set(player.x,player.y+1,player.z);
     torchLight.intensity=1.6+Math.sin(Date.now()*.003)*.2;
   }
-  // Glow lights near diamonds
   let nearR=null,nearB=null,bestR=Infinity,bestB=Infinity;
   dimMap.forEach((type,key)=>{
     const [x,y,z]=key.split(',').map(Number);
@@ -1319,6 +1442,42 @@ function updateAtmosphere(){
   });
   if(nearR){redGlow.position.set(nearR.x,nearR.y,nearR.z);redGlow.intensity=inCave?1.2+Math.sin(Date.now()*.004)*.4:0;}
   if(nearB){blueGlow.position.set(nearB.x,nearB.y,nearB.z);blueGlow.intensity=inCave?1.2+Math.sin(Date.now()*.004+1)*.4:0;}
+}
+
+// ── CIELO DINÁMICO (día/noche) ───────────────────
+function updateSky(dt){
+  if(inCave) return;
+  gameTime=(gameTime+DAY_SPEED*dt)%1;
+  const sc=skyColorAt(gameTime);
+  scene.background=sc;
+  scene.fog.color.copy(sc);
+  scene.fog.near=35; scene.fog.far=RDIST*CHUNK*1.8;
+
+  // Órbita sol/luna (eje X, centro sobre el jugador)
+  const angle=gameTime*Math.PI*2-Math.PI/2;
+  const R=85;
+  sunMesh.position.set(player.x+Math.cos(angle*0.3)*10, Math.sin(angle)*R+5, player.z-R*Math.cos(angle)*0.1);
+  moonMesh.position.set(player.x-Math.cos(angle*0.3)*6, -Math.sin(angle)*R+5, player.z+R*Math.cos(angle)*0.1);
+  const aboveHorizon=Math.sin(angle);
+  sunMesh.visible = aboveHorizon>-0.15;
+  moonMesh.visible= aboveHorizon<0.15;
+
+  // Intensidad de luz según hora
+  const dayF=Math.max(0,aboveHorizon);
+  const dawnF=Math.max(0,1-Math.abs((gameTime%1)-0.27)*18);   // amanecer
+  const duskF=Math.max(0,1-Math.abs((gameTime%1)-0.75)*18);   // atardecer
+  ambLight.intensity=0.10+dayF*0.80;
+  sun.intensity=0.05+dayF*1.25;
+  // Color cálido en amanecer/atardecer
+  const warmFactor=dawnF+duskF;
+  sun.color.setHex(0xfffbe0).lerp(new THREE.Color(0xff7722),Math.min(1,warmFactor*1.5));
+
+  // Estrellas visibles de noche
+  if(starPoints){
+    const nightF=Math.max(0,1-dayF*4);
+    starPoints.material.opacity=nightF;
+    starPoints.position.set(player.x,0,player.z);
+  }
 }
 
 // Spin diamonds
@@ -1346,7 +1505,11 @@ function loop(time){
   const moving=keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight']||keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||(isMobile&&joy.active&&(Math.abs(joy.dx)>.1||Math.abs(joy.dy)>.1));
   updateCamera(dt,!!moving);
   updateAtmosphere();
+  updateSky(dt);
   animateDiamonds(dt);
+  animateWater(time);
+  updateParticles(dt);
+  emitLeafParticles(player.x,player.z,dt);
 
   // Popup fade
   if(popTimer>0){ popTimer-=dt; if(popTimer<=0) document.getElementById('popup').style.opacity='0'; }
