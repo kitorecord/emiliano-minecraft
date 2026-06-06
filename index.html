@@ -842,6 +842,34 @@ const dMat = {
 };
 
 // ═══════════════════════════════════════════════
+//  BLOCK HIGHLIGHT (outline del bloque apuntado)
+// ═══════════════════════════════════════════════
+const hlGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004,1.004,1.004));
+const hlMat = new THREE.LineBasicMaterial({color:0x000000,linewidth:2,depthTest:true,transparent:true,opacity:0.6});
+const hlMesh = new THREE.LineSegments(hlGeo,hlMat);
+hlMesh.visible=false;
+scene.add(hlMesh);
+
+function updateHighlight(){
+  const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
+  const orig=thirdPerson?new THREE.Vector3(player.x,player.y+player.height*.9,player.z):camera.position;
+  rc.set(orig,dir);
+  const vHits=rc.intersectObjects([...chunkMeshes.values()]);
+  const allD=[]; chunkDiams.forEach(g=>allD.push(...g.children));
+  const dHits=rc.intersectObjects(allD);
+  const vh=vHits[0],dh=dHits[0];
+  const hit=(!vh&&!dh)?null:(!vh)?dh:(!dh)?vh:(vh.distance<dh.distance?vh:dh);
+  if(hit&&hit.distance<=5.5){
+    const eps=.01,n=hit.face.normal;
+    const bx=Math.floor(hit.point.x-n.x*eps);
+    const by=Math.floor(hit.point.y-n.y*eps);
+    const bz=Math.floor(hit.point.z-n.z*eps);
+    hlMesh.position.set(bx+.5,by+.5,bz+.5);
+    hlMesh.visible=true;
+  } else { hlMesh.visible=false; }
+}
+
+// ═══════════════════════════════════════════════
 //  STEVE (poleron naranjo, pantalón negro)
 // ═══════════════════════════════════════════════
 function buildSteve(){
@@ -1373,22 +1401,22 @@ let walkT=0;
 function updateCamera(dt,moving){
   if(thirdPerson){
     if(isMobile){
-      // Mobile: Minecraft PE style — detrás y levemente arriba
-      // ángulo ~24° hacia abajo → se ve horizonte + personaje completo
-      const hDist = 9.0;   // lejos horizontalmente
-      const vDist = 4.0;   // poco más arriba que el jugador
-      const camX = player.x + Math.sin(player.yaw) * hDist;
-      const camZ = player.z + Math.cos(player.yaw) * hDist;
-      const camY = player.y + vDist;
-      camera.position.set(camX, camY, camZ);
+      const hDist = 9.0;
+      const vDist = 4.0;
+      const rawX = player.x + Math.sin(player.yaw) * hDist;
+      const rawZ = player.z + Math.cos(player.yaw) * hDist;
+      const rawY = player.y + vDist;
+      const safe = collideCameraThirdPerson(rawX, rawY, rawZ);
+      camera.position.set(safe.x, safe.y, safe.z);
       camera.lookAt(player.x, player.y + 1.0, player.z);
     } else {
       // Desktop: full orbit
       const dist=4.5;
-      const camX=player.x+Math.sin(player.yaw)*dist;
-      const camZ=player.z+Math.cos(player.yaw)*dist;
-      const camY=player.y+player.height+Math.sin(Math.max(-.4,player.pitch))*dist;
-      camera.position.set(camX,camY,camZ);
+      const rawX=player.x+Math.sin(player.yaw)*dist;
+      const rawZ=player.z+Math.cos(player.yaw)*dist;
+      const rawY=player.y+player.height+Math.sin(Math.max(-.4,player.pitch))*dist;
+      const safe=collideCameraThirdPerson(rawX,rawY,rawZ);
+      camera.position.set(safe.x,safe.y,safe.z);
       camera.lookAt(player.x, player.y+player.height*.55, player.z);
     }
 
@@ -1409,6 +1437,22 @@ function updateCamera(dt,moving){
     camera.rotation.x=player.pitch;
     steve.visible=false;
   }
+}
+
+// Colisión de cámara: evita que la cámara quede dentro de un bloque en 3ª persona
+function collideCameraThirdPerson(targetX,targetY,targetZ){
+  const px=player.x, py=player.y+player.height*.6, pz=player.z;
+  const dx=targetX-px, dy=targetY-py, dz=targetZ-pz;
+  const dist=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
+  const nx=dx/dist, ny=dy/dist, nz=dz/dist;
+  // Avanza desde el jugador hacia la cámara; si hay bloque, acorta distancia
+  for(let d=1.0;d<=dist;d+=0.4){
+    if(solidAt(px+nx*d, py+ny*d, pz+nz*d)){
+      const safe=Math.max(0.5,d-0.5);
+      return {x:px+nx*safe, y:py+ny*safe, z:pz+nz*safe};
+    }
+  }
+  return {x:targetX, y:targetY, z:targetZ};
 }
 
 // ═══════════════════════════════════════════════
@@ -1515,6 +1559,7 @@ function loop(time){
 
   const moving=keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight']||keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||(isMobile&&joy.active&&(Math.abs(joy.dx)>.1||Math.abs(joy.dy)>.1));
   updateCamera(dt,!!moving);
+  updateHighlight();
   updateAtmosphere();
   updateSky(dt);
   animateDiamonds(dt);
