@@ -1200,6 +1200,13 @@ document.addEventListener('pointerlockchange',()=>{
 renderer.domElement.addEventListener('click',()=>{
   if(gameRunning&&!pointerLocked) renderer.domElement.requestPointerLock();
 });
+// Clic izquierdo = romper bloque, clic derecho = colocar bloque
+renderer.domElement.addEventListener('mousedown',e=>{
+  if(!gameRunning||!pointerLocked) return;
+  if(e.button===0) raycastBlock(true);
+  if(e.button===2) raycastBlock(false);
+});
+renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('mousemove',e=>{
   if(!pointerLocked) return;
   player.yaw  -=e.movementX*.002;
