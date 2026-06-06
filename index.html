@@ -589,11 +589,11 @@ function carveMine(){
   // Plaza map: terrain is flat at SURF_Y
   let surfH = SURF_Y;
 
-  // Shaft: 3 wide (X: ME_X to ME_X+2), from surface down to y=1
+  // Shaft: 3 wide (X: ME_X to ME_X+2), from surface down to y=2 (keep y=1 as stone floor)
   for(let sx=ME_X-1;sx<=ME_X+3;sx++){
     for(let sz=ME_Z-1;sz<=ME_Z+2;sz++){
-      for(let y=1;y<=surfH+2;y++) { sB(sx,y,sz,null); sD(sx,y,sz,null); }
-      // Fill walls of shaft with cave stone (to make it feel like a tunnel)
+      for(let y=2;y<=surfH+2;y++) { sB(sx,y,sz,null); sD(sx,y,sz,null); }
+      // y=1 kept as stone floor — prevents player from falling to bedrock
     }
   }
 
@@ -658,9 +658,9 @@ function carveMine(){
   // Corridor from shaft to cavern
   for(let cz=ME_Z-2;cz>=CZ+12;cz--){
     for(let sx=ME_X-1;sx<=ME_X+3;sx++){
-      sB(sx,1,cz,null); sB(sx,2,cz,null);
-      sB(sx,3,cz,null); sB(sx,4,cz,null);
-      sB(sx,5,cz,null);
+      // y=1 kept as stone floor in corridor — prevents falls
+      sB(sx,2,cz,null); sB(sx,3,cz,null);
+      sB(sx,4,cz,null); sB(sx,5,cz,null);
     }
     // Ore stone corridor walls
     for(let sx=ME_X-2;sx<=ME_X+4;sx++){
@@ -1244,7 +1244,11 @@ function showPopup(msg){ const el=document.getElementById('popup'); el.textConte
 const rc=new THREE.Raycaster();
 function raycastBlock(remove){
   const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
-  rc.set(camera.position,dir);
+  // En tercera persona el rayo parte desde los ojos del jugador, no desde la cámara
+  const rayOrigin = thirdPerson
+    ? new THREE.Vector3(player.x, player.y + player.height * 0.9, player.z)
+    : camera.position;
+  rc.set(rayOrigin,dir);
   const vHits=rc.intersectObjects([...chunkMeshes.values()]);
   const allD=[]; chunkDiams.forEach(g=>allD.push(...g.children));
   const dHits=rc.intersectObjects(allD);
